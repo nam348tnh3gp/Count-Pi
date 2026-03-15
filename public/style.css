@@ -13,7 +13,6 @@ body {
     overflow-x: hidden;
 }
 
-/* Hiệu ứng sao nền */
 .stars {
     position: fixed;
     top: 0;
@@ -334,6 +333,7 @@ body {
     display: flex;
     justify-content: space-between;
     animation: slideInRight 0.3s ease;
+    font-size: 0.9em;
 }
 
 .history-item:last-child {
@@ -441,7 +441,6 @@ body {
     }
 }
 
-/* Responsive */
 @media (max-width: 768px) {
     .title {
         font-size: 2em;
@@ -459,6 +458,11 @@ body {
     .calculate-btn, .cancel-btn {
         padding: 12px 24px;
         font-size: 1em;
+    }
+    
+    .history-item {
+        flex-wrap: wrap;
+        gap: 5px;
     }
 }
 
