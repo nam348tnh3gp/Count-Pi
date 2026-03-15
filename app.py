@@ -1,16 +1,16 @@
 import os
 import json
-import threading
 import time
+import threading
+import hashlib
+import random
 from datetime import datetime, timedelta
 from flask import Flask, jsonify, request, send_from_directory, render_template
 from flask_socketio import SocketIO, emit
 from flask_sqlalchemy import SQLAlchemy
 from sqlalchemy.exc import OperationalError
-import hashlib
-import hmac
-import random
 
+# Khởi tạo Flask app
 app = Flask(__name__, static_folder='public', template_folder='templates')
 app.config['SECRET_KEY'] = os.urandom(24).hex()
 app.config['SQLALCHEMY_DATABASE_URI'] = os.environ.get('DATABASE_URL', 'sqlite:///pi_digits.db')
@@ -20,20 +20,24 @@ app.config['SQLALCHEMY_ENGINE_OPTIONS'] = {
     'pool_recycle': 300,
 }
 
-# Khởi tạo SocketIO với eventlet
-socketio = SocketIO(app, 
-                   cors_allowed_origins="*", 
-                   async_mode='gevent',
-                   ping_timeout=60,
-                   ping_interval=25,
-                   logger=True,
-                   engineio_logger=True)
+# Khởi tạo SocketIO với async_mode='threading' - ỔN ĐỊNH NHẤT!
+socketio = SocketIO(
+    app, 
+    cors_allowed_origins="*", 
+    async_mode='threading',  # Dùng threading thay vì eventlet/gevent
+    ping_timeout=60,
+    ping_interval=25,
+    logger=True,
+    engineio_logger=False
+)
 
 # Khởi tạo database
 db = SQLAlchemy(app)
 
-# --- Model Database ---
+# ==================== DATABASE MODELS ====================
+
 class PiDigits(db.Model):
+    """Lưu trữ trạng thái hiện tại của số Pi"""
     id = db.Column(db.Integer, primary_key=True)
     pi_string = db.Column(db.String(100000), default="3.")  # Chuỗi Pi
     next_position = db.Column(db.Integer, default=1)        # Vị trí cần tính tiếp theo
@@ -44,6 +48,7 @@ class PiDigits(db.Model):
     lock_expires = db.Column(db.DateTime, nullable=True)     # Thời gian hết hạn khóa
 
 class Contribution(db.Model):
+    """Lưu lịch sử đóng góp"""
     id = db.Column(db.Integer, primary_key=True)
     contributor_ip = db.Column(db.String(50))
     contributor_id = db.Column(db.String(100))
@@ -65,8 +70,11 @@ with app.app_context():
         db.session.add(initial)
         db.session.commit()
         print("✅ Đã khởi tạo database với giá trị ban đầu: 3.")
+    else:
+        print("✅ Database đã tồn tại")
 
-# --- Thuật toán Spigot để tính Pi ---
+# ==================== THUẬT TOÁN SPIGOT ====================
+
 class SpigotPi:
     """Thuật toán Spigot để tính từng chữ số Pi"""
     
@@ -113,6 +121,9 @@ class SpigotPi:
             
             # Tính chữ số thứ n
             digit = spigot_digit(n)
+            
+            # Log để debug
+            print(f"🧮 Spigot: vị trí {n+1} -> chữ số {digit}")
             return digit
             
         except Exception as e:
@@ -123,7 +134,8 @@ class SpigotPi:
                 return known_digits[n]
             return random.randint(0, 9)
 
-# --- Utility functions ---
+# ==================== UTILITY FUNCTIONS ====================
+
 def generate_session_id():
     """Tạo session ID cho client"""
     return hashlib.md5(str(time.time()).encode() + os.urandom(16)).hexdigest()[:16]
@@ -137,12 +149,32 @@ def check_lock_expired(record):
         record.lock_expires = None
         db.session.commit()
         print(f"🔓 Lock tự động hết hạn cho {old_calculator}")
+        
+        # Thông báo cho mọi người
+        socketio.emit('lock_released', {
+            'position': record.next_position,
+            'reason': 'expired'
+        })
         return True
     return False
 
-# --- Routes ---
+def background_task():
+    """Task chạy ngầm để kiểm tra lock hết hạn"""
+    while True:
+        time.sleep(5)  # Kiểm tra mỗi 5 giây
+        try:
+            with app.app_context():
+                record = PiDigits.query.first()
+                if record:
+                    check_lock_expired(record)
+        except Exception as e:
+            print(f"⚠️ Lỗi trong background task: {e}")
+
+# ==================== ROUTES ====================
+
 @app.route('/')
 def index():
+    """Trang chủ"""
     return send_from_directory('public', 'index.html')
 
 @app.route('/admin')
@@ -161,6 +193,7 @@ def get_status():
         check_lock_expired(record)
         
         return jsonify({
+            'success': True,
             'pi_string': record.pi_string,
             'next_position': record.next_position,
             'total_contributors': record.total_contributors,
@@ -171,7 +204,7 @@ def get_status():
         })
     except Exception as e:
         print(f"❌ Error in /api/status: {e}")
-        return jsonify({'error': str(e)}), 500
+        return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/acquire-lock', methods=['POST'])
 def acquire_lock():
@@ -206,7 +239,7 @@ def acquire_lock():
         db.session.commit()
         print(f"🔒 Lock acquired by {client_id}, expires at {record.lock_expires}")
         
-        # Thông báo cho mọi người
+        # Thông báo cho mọi người qua WebSocket
         socketio.emit('lock_acquired', {
             'calculator_id': client_id,
             'position': record.next_position,
@@ -243,8 +276,10 @@ def release_lock():
             
             print(f"🔓 Lock released by {client_id}")
             
+            # Thông báo cho mọi người
             socketio.emit('lock_released', {
-                'position': record.next_position
+                'position': record.next_position,
+                'reason': 'manual'
             })
         
         return jsonify({'success': True})
@@ -321,7 +356,7 @@ def contribute():
         print(f"✅ New digit: {digit} at position {position} by {client_id}")
         print(f"📊 Pi now: {record.pi_string}")
         
-        # Broadcast real-time
+        # Broadcast real-time cho tất cả client
         socketio.emit('new_digit', {
             'digit': digit,
             'position': position,
@@ -340,6 +375,7 @@ def contribute():
         
     except Exception as e:
         print(f"❌ Error in /api/contribute: {e}")
+        db.session.rollback()
         return jsonify({'success': False, 'error': str(e)}), 500
 
 @app.route('/api/history')
@@ -362,18 +398,26 @@ def get_history():
         print(f"❌ Error in /api/history: {e}")
         return jsonify({'error': str(e)}), 500
 
-# --- WebSocket events ---
+# ==================== WEBSOCKET EVENTS ====================
+
 @socketio.on('connect')
 def handle_connect():
+    """Xử lý khi client kết nối"""
     print(f'🔌 Client connected: {request.sid}')
-    emit('connected', {'sid': request.sid, 'message': 'Connected to Pi Calculator server'})
+    emit('connected', {
+        'sid': request.sid, 
+        'message': 'Connected to Pi Calculator server',
+        'timestamp': datetime.utcnow().isoformat()
+    })
 
 @socketio.on('disconnect')
 def handle_disconnect():
+    """Xử lý khi client ngắt kết nối"""
     print(f'🔌 Client disconnected: {request.sid}')
 
 @socketio.on('request_status')
 def handle_status_request():
+    """Client yêu cầu trạng thái hiện tại"""
     try:
         record = PiDigits.query.first()
         if record:
@@ -381,12 +425,19 @@ def handle_status_request():
                 'pi_string': record.pi_string,
                 'next_position': record.next_position,
                 'total_contributors': record.total_contributors,
-                'is_calculating': record.is_calculating
+                'is_calculating': record.is_calculating,
+                'timestamp': datetime.utcnow().isoformat()
             })
     except Exception as e:
         print(f"❌ Error in handle_status_request: {e}")
 
-# --- Error handlers ---
+@socketio.on('ping')
+def handle_ping():
+    """Client ping để giữ kết nối"""
+    emit('pong', {'timestamp': datetime.utcnow().isoformat()})
+
+# ==================== ERROR HANDLERS ====================
+
 @app.errorhandler(404)
 def not_found(error):
     return jsonify({'error': 'Not found'}), 404
@@ -396,20 +447,28 @@ def internal_error(error):
     db.session.rollback()
     return jsonify({'error': 'Internal server error'}), 500
 
-# --- Main entry point ---
+# ==================== MAIN ====================
+
 if __name__ == '__main__':
-    print("=" * 50)
-    print("🚀 Pi Calculator Server đang khởi động...")
+    print("=" * 60)
+    print("🚀 PI CALCULATOR SERVER - THREADING MODE")
+    print("=" * 60)
     print(f"📁 Database: {app.config['SQLALCHEMY_DATABASE_URI']}")
     print(f"🔐 Secret key: {app.config['SECRET_KEY'][:10]}...")
-    print("=" * 50)
+    print(f"🔄 Async mode: threading")
+    print(f"📡 WebSocket: enabled")
+    print("=" * 60)
     
-    # Chạy với eventlet
+    # Khởi động background task để kiểm tra lock
+    bg_thread = threading.Thread(target=background_task, daemon=True)
+    bg_thread.start()
+    print("✅ Background task started")
+    
+    # Chạy app với socketio
     socketio.run(
         app, 
         debug=True, 
         port=5001, 
         host='0.0.0.0',
-        allow_unsafe_werkzeug=True,
-        use_reloader=True
+        allow_unsafe_werkzeug=True
     )
