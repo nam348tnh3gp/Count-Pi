@@ -5,10 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Admin - Pi Calculator</title>
     <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
         body {
             font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
             background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
-            margin: 0;
+            min-height: 100vh;
             padding: 20px;
             color: #fff;
         }
@@ -21,6 +27,24 @@
         h1 {
             text-align: center;
             margin-bottom: 30px;
+            font-size: 2.5em;
+        }
+        
+        .refresh-btn {
+            background: #4299e1;
+            color: white;
+            border: none;
+            padding: 12px 24px;
+            border-radius: 8px;
+            cursor: pointer;
+            font-size: 1.1em;
+            margin-bottom: 20px;
+            transition: all 0.3s;
+        }
+        
+        .refresh-btn:hover {
+            background: #3182ce;
+            transform: translateY(-2px);
         }
         
         .stats-grid {
@@ -38,25 +62,33 @@
             border: 1px solid rgba(255, 255, 255, 0.18);
         }
         
+        .stat-label {
+            font-size: 1em;
+            color: #a8a8a8;
+            margin-bottom: 5px;
+        }
+        
         .stat-value {
             font-size: 2.5em;
             font-weight: bold;
-            margin: 10px 0;
+            color: #feca57;
         }
         
         .pi-display {
             background: rgba(0, 0, 0, 0.3);
-            border-radius: 10px;
+            border-radius: 15px;
             padding: 20px;
             font-family: monospace;
-            font-size: 1.2em;
+            font-size: 1.5em;
             word-wrap: break-word;
             margin-bottom: 30px;
+            border: 2px solid rgba(255, 255, 255, 0.1);
         }
         
         table {
             width: 100%;
             background: rgba(255, 255, 255, 0.1);
+            backdrop-filter: blur(10px);
             border-radius: 15px;
             overflow: hidden;
             border-collapse: collapse;
@@ -71,6 +103,7 @@
         th {
             background: rgba(0, 0, 0, 0.2);
             font-weight: bold;
+            color: #feca57;
         }
         
         tr:hover {
@@ -78,34 +111,21 @@
         }
         
         .badge {
-            padding: 5px 10px;
-            border-radius: 5px;
+            padding: 4px 8px;
+            border-radius: 4px;
             font-size: 0.9em;
-        }
-        
-        .badge.active {
             background: #48bb78;
             color: white;
         }
         
-        .badge.inactive {
-            background: #f56565;
-            color: white;
+        .status-active {
+            color: #48bb78;
+            font-weight: bold;
         }
         
-        .refresh-btn {
-            background: #4299e1;
-            color: white;
-            border: none;
-            padding: 10px 20px;
-            border-radius: 5px;
-            cursor: pointer;
-            font-size: 1em;
-            margin-bottom: 20px;
-        }
-        
-        .refresh-btn:hover {
-            background: #3182ce;
+        .status-inactive {
+            color: #f56565;
+            font-weight: bold;
         }
     </style>
 </head>
@@ -113,43 +133,43 @@
     <div class="container">
         <h1>📊 Admin Panel - Pi Calculator</h1>
         
-        <button class="refresh-btn" onclick="refreshData()">🔄 Refresh</button>
+        <button class="refresh-btn" onclick="refreshData()">
+            🔄 Refresh Data
+        </button>
         
         <div class="stats-grid" id="stats">
             <div class="stat-card">
-                <div>Chữ số đã tính</div>
+                <div class="stat-label">Chữ số đã tính</div>
                 <div class="stat-value" id="digitCount">0</div>
             </div>
             <div class="stat-card">
-                <div>Người đã góp</div>
+                <div class="stat-label">Người đã góp</div>
                 <div class="stat-value" id="contributorCount">0</div>
             </div>
             <div class="stat-card">
-                <div>Vị trí tiếp theo</div>
+                <div class="stat-label">Vị trí tiếp theo</div>
                 <div class="stat-value" id="nextPosition">1</div>
             </div>
             <div class="stat-card">
-                <div>Trạng thái</div>
+                <div class="stat-label">Trạng thái</div>
                 <div class="stat-value" id="status">🟢 Rảnh</div>
             </div>
         </div>
         
         <div class="pi-display" id="piDisplay">3.</div>
         
-        <h2>📜 Lịch sử đóng góp</h2>
+        <h2 style="margin-bottom: 20px;">📜 Lịch sử đóng góp</h2>
         <table id="historyTable">
             <thead>
                 <tr>
                     <th>Vị trí</th>
                     <th>Chữ số</th>
                     <th>Contributor</th>
-                    <th>IP</th>
-                    <th>Session</th>
                     <th>Thời gian</th>
                 </tr>
             </thead>
             <tbody id="historyBody">
-                <tr><td colspan="6" style="text-align: center;">Đang tải...</td></tr>
+                <tr><td colspan="4" style="text-align: center;">Đang tải...</td></tr>
             </tbody>
         </table>
     </div>
@@ -161,15 +181,17 @@
                 const statusRes = await fetch('/api/status');
                 const status = await statusRes.json();
                 
-                document.getElementById('digitCount').textContent = status.length;
-                document.getElementById('contributorCount').textContent = status.total_contributors;
-                document.getElementById('nextPosition').textContent = status.next_position;
-                document.getElementById('piDisplay').textContent = status.pi_string;
-                
-                if (status.is_calculating) {
-                    document.getElementById('status').innerHTML = '🔴 Đang tính';
-                } else {
-                    document.getElementById('status').innerHTML = '🟢 Rảnh';
+                if (status.success) {
+                    document.getElementById('digitCount').textContent = status.length;
+                    document.getElementById('contributorCount').textContent = status.total_contributors;
+                    document.getElementById('nextPosition').textContent = status.next_position;
+                    document.getElementById('piDisplay').textContent = status.pi_string;
+                    
+                    if (status.is_calculating) {
+                        document.getElementById('status').innerHTML = '🔴 Đang tính';
+                    } else {
+                        document.getElementById('status').innerHTML = '🟢 Rảnh';
+                    }
                 }
                 
                 // Get history
@@ -179,25 +201,29 @@
                 const tbody = document.getElementById('historyBody');
                 tbody.innerHTML = '';
                 
-                history.forEach(item => {
-                    const row = tbody.insertRow();
-                    row.innerHTML = `
-                        <td>${item.position}</td>
-                        <td><strong>${item.digit}</strong></td>
-                        <td>${item.contributor}</td>
-                        <td>${item.ip || 'N/A'}</td>
-                        <td>${item.session || 'N/A'}</td>
-                        <td>${new Date(item.time).toLocaleString()}</td>
-                    `;
-                });
+                if (history.length === 0) {
+                    tbody.innerHTML = '<tr><td colspan="4" style="text-align: center;">Chưa có dữ liệu</td></tr>';
+                } else {
+                    history.forEach(item => {
+                        const row = tbody.insertRow();
+                        row.innerHTML = `
+                            <td><strong>${item.position}</strong></td>
+                            <td style="font-size: 1.2em; color: #feca57;">${item.digit}</td>
+                            <td>${item.contributor}</td>
+                            <td>${new Date(item.time).toLocaleString()}</td>
+                        `;
+                    });
+                }
                 
             } catch (error) {
                 console.error('Error refreshing:', error);
+                document.getElementById('historyBody').innerHTML = 
+                    '<tr><td colspan="4" style="text-align: center; color: #f56565;">Lỗi tải dữ liệu</td></tr>';
             }
         }
         
-        // Refresh every 5 seconds
-        setInterval(refreshData, 5000);
+        // Auto refresh
+        setInterval(refreshData, 3000);
         refreshData();
     </script>
 </body>
