@@ -1,68 +1,79 @@
-// ==================== PI CALCULATOR - BẢN CỰC NHANH ====================
-// Không rườm rà, không WebSocket phức tạp
+// ==================== PI CALCULATOR - BẢN NHẸ, NHANH ====================
 
-// ID người dùng
+// State
 let clientId = localStorage.getItem('clientId');
 if (!clientId) {
     clientId = 'user_' + Math.random().toString(36).substr(2, 9);
     localStorage.setItem('clientId', clientId);
 }
 
-console.log('✅ Script loaded, ID:', clientId);
+let hasLock = false;
+let timerInterval = null;
+let statusInterval = null;
 
 // DOM elements
-const piFraction = document.getElementById('piFraction');
-const nextDigitIndicator = document.getElementById('nextDigitIndicator');
-const digitCount = document.getElementById('digitCount');
-const contributorCount = document.getElementById('contributorCount');
-const nextPosition = document.getElementById('nextPosition');
-const statusEl = document.getElementById('status');
-const calculateBtn = document.getElementById('calculateBtn');
-const cancelBtn = document.getElementById('cancelBtn');
-const timerEl = document.getElementById('timer');
-const timerSeconds = document.getElementById('timerSeconds');
-const calculationArea = document.getElementById('calculationArea');
-const messageEl = document.getElementById('message');
-const historyList = document.getElementById('historyList');
+const elements = {
+    piFraction: document.getElementById('piFraction'),
+    nextDigitIndicator: document.getElementById('nextDigitIndicator'),
+    digitCount: document.getElementById('digitCount'),
+    contributorCount: document.getElementById('contributorCount'),
+    nextPosition: document.getElementById('nextPosition'),
+    status: document.getElementById('status'),
+    calculateBtn: document.getElementById('calculateBtn'),
+    cancelBtn: document.getElementById('cancelBtn'),
+    timer: document.getElementById('timer'),
+    timerSeconds: document.getElementById('timerSeconds'),
+    calculationArea: document.getElementById('calculationArea'),
+    message: document.getElementById('message'),
+    historyList: document.getElementById('historyList')
+};
 
-// ==================== HÀM CƠ BẢN ====================
+// ==================== UTILITIES ====================
 
-function showMessage(text, type) {
-    messageEl.className = `message ${type}`;
-    messageEl.textContent = text;
-    messageEl.style.display = 'block';
-    setTimeout(() => { messageEl.style.display = 'none'; }, 3000);
+function showMessage(text, type = 'info', duration = 3000) {
+    const el = elements.message;
+    if (!el) return;
+    el.className = `message ${type}`;
+    el.textContent = text;
+    el.style.display = 'block';
+    setTimeout(() => { el.style.display = 'none'; }, duration);
 }
 
-// Cập nhật số Pi
 function updatePiDisplay(piString) {
+    if (!elements.piFraction) return;
+    
     if (piString === "3.") {
-        piFraction.innerHTML = '';
+        elements.piFraction.innerHTML = '';
     } else {
         const parts = piString.split('.');
-        piFraction.textContent = parts[1] || '';
+        elements.piFraction.textContent = parts[1] || '';
     }
-    digitCount.textContent = piString.length - 2;
+    
+    if (elements.digitCount) {
+        elements.digitCount.textContent = piString.length - 2;
+    }
 }
 
-// Thêm vào lịch sử
 function addToHistory(position, digit, contributor) {
+    if (!elements.historyList) return;
+    
     const item = document.createElement('div');
     item.className = 'history-item';
     item.innerHTML = `
-        <span>Vị trí ${position}: <strong>${digit}</strong></span>
-        <span> - ${contributor}</span>
-        <span>${new Date().toLocaleTimeString()}</span>
+        <span>Vị trí ${position}: <strong style="color:#feca57">${digit}</strong></span>
+        <span style="color:#a8a8a8"> - ${contributor}</span>
+        <span style="color:#666">${new Date().toLocaleTimeString()}</span>
     `;
-    historyList.insertBefore(item, historyList.firstChild);
-    if (historyList.children.length > 20) {
-        historyList.removeChild(historyList.lastChild);
+    elements.historyList.insertBefore(item, elements.historyList.firstChild);
+    
+    // Giữ 30 item gần nhất
+    while (elements.historyList.children.length > 30) {
+        elements.historyList.removeChild(elements.historyList.lastChild);
     }
 }
 
-// ==================== GỌI API ====================
+// ==================== API CALLS ====================
 
-// Tải dữ liệu ban đầu
 async function loadStatus() {
     try {
         const res = await fetch('/api/status');
@@ -70,43 +81,47 @@ async function loadStatus() {
         
         if (data.success) {
             updatePiDisplay(data.pi_string);
-            nextPosition.textContent = data.next_position;
-            contributorCount.textContent = data.total_contributors;
+            if (elements.nextPosition) elements.nextPosition.textContent = data.next_position;
+            if (elements.contributorCount) elements.contributorCount.textContent = data.total_contributors;
             
             if (data.is_calculating) {
-                statusEl.textContent = '🔴 Đang có người tính';
-                calculateBtn.disabled = true;
+                if (elements.status) elements.status.textContent = '🔴 Đang có người tính';
+                if (elements.calculateBtn) elements.calculateBtn.disabled = true;
             } else {
-                statusEl.textContent = '🟢 Rảnh';
-                calculateBtn.disabled = false;
+                if (elements.status) elements.status.textContent = '🟢 Rảnh';
+                if (elements.calculateBtn) elements.calculateBtn.disabled = false;
             }
         }
     } catch (err) {
-        console.error('Lỗi tải:', err);
+        console.error('Lỗi load status:', err);
     }
 }
 
-// Tải lịch sử
 async function loadHistory() {
     try {
-        const res = await fetch('/api/history?limit=10');
+        const res = await fetch('/api/history?limit=20');
         const history = await res.json();
         
-        historyList.innerHTML = '';
-        history.forEach(item => {
-            addToHistory(item.position, item.digit, item.contributor);
-        });
+        if (elements.historyList) {
+            elements.historyList.innerHTML = '';
+            history.forEach(item => {
+                addToHistory(item.position, item.digit, item.contributor);
+            });
+        }
     } catch (err) {
-        console.error('Lỗi lịch sử:', err);
+        console.error('Lỗi load history:', err);
     }
 }
 
-// XIN KHÓA - Chạy ngay khi bấm nút
+// ==================== LOCK & CALCULATION ====================
+
 async function requestLock() {
     try {
         // Disable nút
-        calculateBtn.disabled = true;
-        calculateBtn.textContent = '⏳ Đang xin...';
+        if (elements.calculateBtn) {
+            elements.calculateBtn.disabled = true;
+            elements.calculateBtn.innerHTML = '<span class="btn-icon">⏳</span><span class="btn-text">Đang xin...</span>';
+        }
         
         const res = await fetch('/api/acquire-lock', {
             method: 'POST',
@@ -117,83 +132,101 @@ async function requestLock() {
         const data = await res.json();
         
         if (data.success) {
-            // Đã xin được khóa - chuyển sang chế độ tính
+            // Đã xin được khóa
             hasLock = true;
-            calculateBtn.style.display = 'none';
-            cancelBtn.style.display = 'flex';
-            timerEl.style.display = 'block';
-            calculationArea.style.display = 'block';
-            statusEl.textContent = '🟡 Đang tính...';
+            
+            // UI chuyển sang chế độ tính
+            if (elements.calculateBtn) elements.calculateBtn.style.display = 'none';
+            if (elements.cancelBtn) elements.cancelBtn.style.display = 'flex';
+            if (elements.timer) elements.timer.style.display = 'block';
+            if (elements.calculationArea) elements.calculationArea.style.display = 'block';
+            if (elements.status) elements.status.textContent = '🟡 Đang tính...';
             
             // Bắt đầu đếm ngược 30s
             let timeLeft = 30;
-            timerSeconds.textContent = timeLeft;
+            if (elements.timerSeconds) elements.timerSeconds.textContent = timeLeft;
             
-            const timer = setInterval(() => {
+            clearInterval(timerInterval);
+            timerInterval = setInterval(() => {
                 timeLeft--;
-                timerSeconds.textContent = timeLeft;
+                if (elements.timerSeconds) elements.timerSeconds.textContent = timeLeft;
                 
                 if (timeLeft <= 0) {
-                    clearInterval(timer);
+                    clearInterval(timerInterval);
                     releaseLock();
                     showMessage('⏰ Hết thời gian!', 'error');
                 }
             }, 1000);
             
-            // TỰ ĐỘNG TÍNH NGAY (1 giây sau)
-            setTimeout(async () => {
-                // Tính số - demo random
+            // TÍNH TOÁN - chỉ chờ 1 giây cho demo
+            setTimeout(() => {
+                // Random digit (có thể thay bằng thuật toán thật)
                 const digit = Math.floor(Math.random() * 10);
                 
                 // Gửi kết quả
-                const submitRes = await fetch('/api/contribute', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({
-                        digit: digit,
-                        position: data.position,
-                        client_id: clientId,
-                        session_id: 'session_' + Date.now()
-                    })
-                });
+                submitDigit(digit, data.position);
                 
-                const submitData = await submitRes.json();
-                
-                if (submitData.success) {
-                    showMessage(`✅ Đã thêm chữ số ${digit}!`, 'success');
-                    
-                    // Cập nhật UI
-                    updatePiDisplay(submitData.pi_string);
-                    nextPosition.textContent = submitData.next_position;
-                    contributorCount.textContent = submitData.total_contributors;
-                    
-                    // Thêm vào lịch sử
-                    addToHistory(data.position, digit, clientId.substr(0, 8) + '...');
-                    
-                    // Trả khóa
-                    releaseLock();
-                } else {
-                    showMessage('❌ Lỗi: ' + submitData.error, 'error');
-                    releaseLock();
-                }
-            }, 1000); // CHỜ 1 GIÂY - có thể giảm xuống 500ms nếu muốn nhanh hơn
+            }, 1000); // 1 giây - có thể giảm xuống 500ms nếu muốn nhanh hơn
             
         } else {
             // Không xin được khóa
             showMessage(data.error || 'Đang có người tính', 'error');
-            calculateBtn.disabled = false;
-            calculateBtn.textContent = '🔢 Tính chữ số tiếp theo';
+            if (elements.calculateBtn) {
+                elements.calculateBtn.disabled = false;
+                elements.calculateBtn.innerHTML = '<span class="btn-icon">🔢</span><span class="btn-text">Tính chữ số tiếp theo</span>';
+            }
         }
         
     } catch (err) {
-        console.error('Lỗi:', err);
-        showMessage('❌ Lỗi kết nối server', 'error');
-        calculateBtn.disabled = false;
-        calculateBtn.textContent = '🔢 Tính chữ số tiếp theo';
+        console.error('Lỗi request lock:', err);
+        showMessage('❌ Lỗi kết nối', 'error');
+        if (elements.calculateBtn) {
+            elements.calculateBtn.disabled = false;
+            elements.calculateBtn.innerHTML = '<span class="btn-icon">🔢</span><span class="btn-text">Tính chữ số tiếp theo</span>';
+        }
     }
 }
 
-// TRẢ KHÓA
+async function submitDigit(digit, position) {
+    try {
+        const res = await fetch('/api/contribute', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({
+                digit: digit,
+                position: position,
+                client_id: clientId,
+                session_id: 'session_' + Date.now()
+            })
+        });
+        
+        const data = await res.json();
+        
+        if (data.success) {
+            showMessage(`✅ Đã thêm chữ số ${digit}!`, 'success');
+            
+            // Cập nhật UI
+            updatePiDisplay(data.pi_string);
+            if (elements.nextPosition) elements.nextPosition.textContent = data.next_position;
+            if (elements.contributorCount) elements.contributorCount.textContent = data.total_contributors;
+            
+            // Thêm vào lịch sử
+            addToHistory(position, digit, clientId.substr(0, 6) + '...');
+            
+            // Trả khóa
+            releaseLock();
+        } else {
+            showMessage('❌ ' + data.error, 'error');
+            releaseLock();
+        }
+        
+    } catch (err) {
+        console.error('Lỗi submit:', err);
+        showMessage('❌ Lỗi gửi kết quả', 'error');
+        releaseLock();
+    }
+}
+
 async function releaseLock() {
     if (!hasLock) return;
     
@@ -204,52 +237,97 @@ async function releaseLock() {
             body: JSON.stringify({ client_id: clientId })
         });
     } catch (err) {
-        console.error('Lỗi trả khóa:', err);
+        console.error('Lỗi release lock:', err);
     }
     
     // Reset UI
     hasLock = false;
-    calculateBtn.style.display = 'flex';
-    calculateBtn.disabled = false;
-    calculateBtn.textContent = '🔢 Tính chữ số tiếp theo';
-    cancelBtn.style.display = 'none';
-    timerEl.style.display = 'none';
-    calculationArea.style.display = 'none';
+    clearInterval(timerInterval);
     
-    // Cập nhật trạng thái
+    if (elements.calculateBtn) {
+        elements.calculateBtn.style.display = 'flex';
+        elements.calculateBtn.disabled = false;
+        elements.calculateBtn.innerHTML = '<span class="btn-icon">🔢</span><span class="btn-text">Tính chữ số tiếp theo</span>';
+    }
+    if (elements.cancelBtn) elements.cancelBtn.style.display = 'none';
+    if (elements.timer) elements.timer.style.display = 'none';
+    if (elements.calculationArea) elements.calculationArea.style.display = 'none';
+    
+    // Load lại status
     loadStatus();
 }
 
-// ==================== SỰ KIỆN ====================
+// ==================== WEBSOCKET ====================
 
-// Khi trang load
+let socket = null;
+
+function connectWebSocket() {
+    try {
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}`;
+        
+        socket = io(wsUrl, {
+            transports: ['websocket', 'polling'],
+            reconnection: true,
+            timeout: 5000
+        });
+        
+        socket.on('connect', () => {
+            console.log('✅ WebSocket connected');
+        });
+        
+        socket.on('new_digit', (data) => {
+            console.log('📥 New digit:', data);
+            updatePiDisplay(data.pi_string);
+            if (elements.nextPosition) elements.nextPosition.textContent = data.next_position;
+            if (elements.contributorCount) elements.contributorCount.textContent = data.total_contributors;
+            addToHistory(data.position, data.digit, data.contributor_id);
+        });
+        
+        socket.on('reset', (data) => {
+            console.log('🔄 Reset:', data);
+            updatePiDisplay(data.pi_string);
+            if (elements.nextPosition) elements.nextPosition.textContent = data.next_position;
+            showMessage(data.message, 'warning');
+        });
+        
+    } catch (err) {
+        console.error('❌ WebSocket error:', err);
+    }
+}
+
+// ==================== INIT ====================
+
 document.addEventListener('DOMContentLoaded', () => {
-    console.log('🚀 App starting...');
+    console.log('🚀 App started, ID:', clientId);
     
     // Load dữ liệu
     loadStatus();
     loadHistory();
     
-    // Gắn sự kiện cho nút
-    calculateBtn.addEventListener('click', requestLock);
-    cancelBtn.addEventListener('click', releaseLock);
+    // WebSocket
+    connectWebSocket();
     
-    // Tự động refresh mỗi 5 giây
+    // Event listeners
+    if (elements.calculateBtn) {
+        elements.calculateBtn.addEventListener('click', requestLock);
+    }
+    if (elements.cancelBtn) {
+        elements.cancelBtn.addEventListener('click', releaseLock);
+    }
+    
+    // Auto refresh mỗi 5 giây
     setInterval(() => {
-        if (!hasLock) {
-            loadStatus();
-        }
+        if (!hasLock) loadStatus();
     }, 5000);
     
-    // Tự động refresh lịch sử mỗi 10 giây
+    // Refresh history mỗi 10 giây
     setInterval(() => {
-        if (!hasLock) {
-            loadHistory();
-        }
+        if (!hasLock) loadHistory();
     }, 10000);
 });
 
-// Khi thoát trang
+// Release lock khi thoát
 window.addEventListener('beforeunload', () => {
     if (hasLock) {
         navigator.sendBeacon('/api/release-lock', JSON.stringify({ client_id: clientId }));
