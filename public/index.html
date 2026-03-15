@@ -1,0 +1,101 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Cùng tính số Pi - Mỗi người một chữ số</title>
+    <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+    <div class="stars"></div>
+    
+    <div class="container">
+        <h1 class="title">
+            <span class="title-icon">π</span>
+            Cùng Tính Số Pi
+        </h1>
+        
+        <p class="subtitle">
+            Mỗi người chỉ tính <strong>MỘT chữ số</strong> và chuyển tiếp cho người sau!
+        </p>
+        
+        <div class="pi-card">
+            <div class="pi-display" id="piDisplay">
+                <span class="pi-integer">3</span><span class="pi-decimal">.</span>
+                <span class="pi-fraction" id="piFraction"></span>
+                <span class="next-digit" id="nextDigitIndicator">_</span>
+            </div>
+            
+            <div class="pi-controls">
+                <button class="calculate-btn" id="calculateBtn" onclick="requestLock()">
+                    <span class="btn-icon">🔢</span>
+                    <span class="btn-text">Tính chữ số tiếp theo</span>
+                </button>
+                
+                <button class="cancel-btn" id="cancelBtn" onclick="releaseLock()" style="display: none;">
+                    <span class="btn-icon">❌</span>
+                    <span class="btn-text">Hủy tính</span>
+                </button>
+            </div>
+            
+            <div class="timer" id="timer" style="display: none;">
+                ⏳ Còn <span id="timerSeconds">30</span> giây để tính...
+            </div>
+            
+            <div id="calculationArea" style="display: none;" class="calculation-area">
+                <div class="calculator-spinner"></div>
+                <p>Đang tính toán...</p>
+                <p class="calculation-note">Thuật toán Spigot đang chạy</p>
+            </div>
+        </div>
+        
+        <div class="stats-grid">
+            <div class="stat-card">
+                <div class="stat-icon">📊</div>
+                <div class="stat-value" id="digitCount">0</div>
+                <div class="stat-label">Chữ số đã tính</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">👥</div>
+                <div class="stat-value" id="contributorCount">0</div>
+                <div class="stat-label">Người đã góp</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">🎯</div>
+                <div class="stat-value" id="nextPosition">1</div>
+                <div class="stat-label">Vị trí tiếp theo</div>
+            </div>
+            
+            <div class="stat-card">
+                <div class="stat-icon">⚡</div>
+                <div class="stat-value" id="status">Rảnh</div>
+                <div class="stat-label">Trạng thái</div>
+            </div>
+        </div>
+        
+        <div class="message" id="message"></div>
+        
+        <div class="history-section">
+            <h3>📜 Lịch sử đóng góp</h3>
+            <div class="history-list" id="historyList">
+                <div class="loading">Đang tải lịch sử...</div>
+            </div>
+        </div>
+        
+        <div class="info-section">
+            <h3>ℹ️ Cách thức hoạt động</h3>
+            <ul>
+                <li>Nhấn "Tính chữ số tiếp theo" để xin khóa</li>
+                <li>Mỗi người chỉ được tính 1 chữ số (có 30 giây)</li>
+                <li>Thuật toán Spigot đảm bảo độ chính xác</li>
+                <li>Kết quả được cập nhật real-time cho mọi người</li>
+            </ul>
+        </div>
+    </div>
+    
+    <script src="/socket.io/socket.io.js"></script>
+    <script src="/script.js"></script>
+</body>
+</html>
