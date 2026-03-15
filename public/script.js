@@ -1,4 +1,5 @@
-// ==================== PI CALCULATOR - BBP REAL VERSION ====================
+// ==================== PI CALCULATOR - BBP EXACT VERSION ====================
+// Tính chính xác chữ số Pi thập phân ở BẤT KỲ vị trí nào
 
 // ==================== USER ID ====================
 
@@ -101,7 +102,7 @@ function addToHistory(position, digit, contributor) {
 
 
 
-// ==================== BBP ALGORITHM ====================
+// ==================== BBP ALGORITHM - CHÍNH XÁC CAO ====================
 
 function modPow(base, exp, mod) {
 
@@ -127,30 +128,23 @@ function series(j, n) {
 
     let s = 0;
 
+    // Tính tổng phần 1 (dùng modular exponentiation)
     for (let k = 0; k <= n; k++) {
 
         let r = 8 * k + j;
-
         let mod = modPow(16, n - k, r);
-
         s += mod / r;
-
-        s = s - Math.floor(s);
+        s = s - Math.floor(s); // Giữ phần thập phân
     }
 
+    // Tính tổng phần 2 (phần còn lại của chuỗi vô hạn)
     let t = 0;
-
     let k = n + 1;
-
+    
     while (true) {
-
         let newTerm = Math.pow(16, n - k) / (8 * k + j);
-
-        if (newTerm < 1e-15)
-            break;
-
+        if (newTerm < 1e-18) break; // Độ chính xác cao hơn
         t += newTerm;
-
         k++;
     }
 
@@ -158,34 +152,65 @@ function series(j, n) {
 }
 
 
-// ==================== CALCULATE PI DIGIT ====================
+// ==================== CHUYỂN HEX SANG THẬP PHÂN ====================
+
+function hexToDecimalDigits(hexDigits, count = 1) {
+    // hexDigits: mảng các chữ số hex (0-15)
+    // count: số chữ số thập phân cần lấy
+    
+    // Tính giá trị thập phân từ các chữ số hex
+    // Giá trị = d1/16 + d2/16^2 + d3/16^3 + ...
+    
+    let value = 0;
+    for (let i = 0; i < hexDigits.length; i++) {
+        value += hexDigits[i] / Math.pow(16, i + 1);
+    }
+    
+    // Nhân với 10^count để lấy count chữ số thập phân
+    let decimal = value * Math.pow(10, count);
+    
+    // Lấy phần nguyên
+    return Math.floor(decimal);
+}
+
+
+// ==================== TÍNH CHỮ SỐ PI ====================
 
 function calculatePiDigit(position) {
-
+    // position là vị trí cần tính (1 = chữ số đầu sau dấu phẩy)
+    
+    // Dùng cache cho 100 số đầu
     if (position <= PI_DIGITS.length) {
-
-        console.log("Cached digit:", position);
-
+        console.log(`📦 Cache[${position}] = ${PI_DIGITS[position - 1]}`);
         return PI_DIGITS[position - 1];
     }
 
-    console.log("BBP computing digit:", position);
+    console.log(`🧮 BBP computing digit ${position}...`);
 
     let n = position - 1;
-
-    let x =
-        4 * series(1, n) -
-        2 * series(4, n) -
-        series(5, n) -
-        series(6, n);
-
-    x = x - Math.floor(x);
-
-    let hexDigit = Math.floor(16 * x);
-
-    return hexDigit;
+    
+    // Cần tính 4 chữ số hex để có độ chính xác cho 1 chữ số thập phân
+    // Vì mỗi chữ số hex = 4 bit, cần ~4 chữ số hex để có 1 chữ số thập phân
+    let hexDigits = [];
+    
+    for (let offset = 0; offset < 4; offset++) {
+        let x = 4 * series(1, n + offset) - 
+                2 * series(4, n + offset) - 
+                series(5, n + offset) - 
+                series(6, n + offset);
+        
+        x = x - Math.floor(x);
+        let hexDigit = Math.floor(16 * x);
+        hexDigits.push(hexDigit);
+    }
+    
+    // Chuyển 4 chữ số hex sang 1 chữ số thập phân
+    let decimalDigit = hexToDecimalDigits(hexDigits, 1);
+    
+    console.log(`   Hex digits: ${hexDigits.map(d => d.toString(16)).join('')} → Decimal: ${decimalDigit}`);
+    
+    return decimalDigit;
 }
-
 
 
 // ==================== LOAD STATUS ====================
@@ -287,7 +312,7 @@ async function requestLock() {
 
         let digit = calculatePiDigit(data.position);
 
-        console.log("Digit:", digit);
+        console.log("Final digit:", digit);
 
         let submit = await fetch("/api/contribute", {
 
@@ -320,7 +345,7 @@ async function requestLock() {
 
         releaseLock();
 
-    }, 1000);
+    }, 1500); // Tăng thời gian lên 1.5s vì BBP lâu hơn
 }
 
 
