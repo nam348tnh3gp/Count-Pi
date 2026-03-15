@@ -4,35 +4,19 @@
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>π Cùng Tính Số Pi</title>
-    <link rel="stylesheet" href="/style.css">
-    <!-- Dùng CDN socket.io để đảm bảo luôn tải được -->
     <script src="https://cdn.socket.io/4.5.0/socket.io.min.js"></script>
+    <link rel="stylesheet" href="/style.css">
     <style>
-        /* Fallback style */
-        body { 
-            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
-            background: linear-gradient(135deg, #0f0c29, #302b63, #24243e);
-            color: white;
-            margin: 0;
-            padding: 20px;
-        }
-        .container { max-width: 1200px; margin: 0 auto; }
-        .title { text-align: center; font-size: 3em; }
-        .subtitle { text-align: center; color: #a8a8a8; }
+        /* Style cơ bản đề phòng CSS lỗi */
+        body { font-family: Arial; background: #0f0c29; color: white; margin: 0; padding: 20px; }
+        .container { max-width: 800px; margin: 0 auto; }
+        .pi-display { font-size: 2em; background: #333; padding: 20px; border-radius: 10px; }
     </style>
 </head>
 <body>
-    <div class="stars"></div>
-    
     <div class="container">
-        <h1 class="title">
-            <span class="title-icon">π</span>
-            Cùng Tính Số Pi
-        </h1>
-        
-        <p class="subtitle">
-            Mỗi người chỉ tính <strong>MỘT chữ số</strong> và chuyển tiếp cho người sau!
-        </p>
+        <h1 class="title">π Cùng Tính Số Pi</h1>
+        <p class="subtitle">Mỗi người chỉ tính <strong>MỘT chữ số</strong></p>
         
         <div class="pi-card">
             <div class="pi-display" id="piDisplay">
@@ -46,21 +30,19 @@
                     <span class="btn-icon">🔢</span>
                     <span class="btn-text">Tính chữ số tiếp theo</span>
                 </button>
-                
                 <button class="cancel-btn" id="cancelBtn" style="display: none;">
                     <span class="btn-icon">❌</span>
-                    <span class="btn-text">Hủy tính</span>
+                    <span class="btn-text">Hủy</span>
                 </button>
             </div>
             
             <div class="timer" id="timer" style="display: none;">
-                ⏳ Còn <span id="timerSeconds">30</span> giây để tính...
+                ⏳ Còn <span id="timerSeconds">30</span> giây
             </div>
             
             <div id="calculationArea" style="display: none;" class="calculation-area">
                 <div class="calculator-spinner"></div>
                 <p>Đang tính toán...</p>
-                <p class="calculation-note">Thuật toán Spigot đang chạy</p>
             </div>
         </div>
         
@@ -68,17 +50,17 @@
             <div class="stat-card">
                 <div class="stat-icon">📊</div>
                 <div class="stat-value" id="digitCount">0</div>
-                <div class="stat-label">Chữ số đã tính</div>
+                <div class="stat-label">Chữ số</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">👥</div>
                 <div class="stat-value" id="contributorCount">0</div>
-                <div class="stat-label">Người đã góp</div>
+                <div class="stat-label">Người góp</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">🎯</div>
                 <div class="stat-value" id="nextPosition">1</div>
-                <div class="stat-label">Vị trí tiếp theo</div>
+                <div class="stat-label">Vị trí</div>
             </div>
             <div class="stat-card">
                 <div class="stat-icon">⚡</div>
@@ -90,38 +72,22 @@
         <div class="message" id="message"></div>
         
         <div class="history-section">
-            <h3>📜 Lịch sử đóng góp</h3>
+            <h3>📜 Lịch sử</h3>
             <div class="history-list" id="historyList">
-                <div class="loading">Đang tải lịch sử...</div>
+                <div class="loading">Đang tải...</div>
             </div>
         </div>
         
         <div class="info-section">
-            <h3>ℹ️ Cách thức hoạt động</h3>
+            <h3>ℹ️ Hướng dẫn</h3>
             <ul>
-                <li>Nhấn "Tính chữ số tiếp theo" để xin khóa</li>
-                <li>Mỗi người chỉ được tính 1 chữ số (có 30 giây)</li>
-                <li>Thuật toán Spigot đảm bảo độ chính xác</li>
-                <li>Kết quả được cập nhật real-time cho mọi người</li>
+                <li>Nhấn "Tính" để xin khóa</li>
+                <li>Có 30 giây để tính</li>
+                <li>Kết quả cập nhật real-time</li>
             </ul>
         </div>
     </div>
     
-    <!-- Script chính -->
     <script src="/script.js"></script>
-    
-    <!-- Debug script -->
-    <script>
-        console.log('✅ HTML loaded');
-        window.addEventListener('load', function() {
-            console.log('✅ Window loaded');
-            if (typeof io === 'undefined') {
-                console.error('❌ Socket.io not loaded!');
-                document.getElementById('status').textContent = 'Lỗi: Socket.io';
-            } else {
-                console.log('✅ Socket.io loaded');
-            }
-        });
-    </script>
 </body>
 </html>
